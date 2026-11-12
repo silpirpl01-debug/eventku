@@ -1,33 +1,44 @@
+
 import Link from "next/link";
 import { rupiah, type Event } from "@/data/data/events";
 
 export default function KartuEvent({ event }: { event: Event }) {
   const sisa = event.kuota - event.terisi;
-  const laris = sisa > 0 && event.terisi / event.kuota >= 0.5;
+
   return (
-    <div className="rounded-xl border bg-white p-4 shadow-sm">
-      <span className="rounded bg-blue-100 px-2 py-0.5 text-xs text-blue-700">
+    <article className="rounded-xl border bg-white p-4 shadow-sm">
+      <span className="rounded bg-blue-100 px-2 py-1 text-xs text-blue-700">
         {event.kategori}
       </span>
-      {laris && (
-        <span className="ml-2 rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
-          Laris
-        </span>
+
+      <h2 className="mt-3 text-lg font-bold">
+        {event.judul}
+      </h2>
+
+      <p className="mt-1 text-sm text-slate-500">
+        {event.tanggal} · {event.lokasi}
+      </p>
+
+      <p className="mt-3 font-semibold">
+        {rupiah(event.harga)}
+      </p>
+
+      {sisa <= 0 ? (
+        <p className="mt-2 text-sm font-medium text-red-600">
+          Tiket habis
+        </p>
+      ) : (
+        <p className="mt-2 text-sm text-slate-600">
+          Sisa {sisa} tiket
+        </p>
       )}
-      <h3 className="mt-2 text-lg font-semibold">{event.judul}</h3>
-      <p className="text-sm text-slate-500">
-        {event.tanggal} - {event.lokasi}
-      </p>
-      <p className="mt-2 font-medium">{rupiah(event.harga)}</p>
-      <p className={sisa === 0 ? "text-sm text-red-600" : "text-sm text-green-700"}>
-        {sisa === 0 ? "Tiket habis" : `Sisa ${sisa} tiket`}
-      </p>
+
       <Link
         href={`/event/${event.id}`}
-        className="mt-3 inline-block rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700"
+        className="mt-4 inline-block rounded bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700"
       >
-        Lihat detail
+        Lihat Detail
       </Link>
-    </div>
+    </article>
   );
 }
