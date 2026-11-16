@@ -1,5 +1,6 @@
 
 import Link from "next/link";
+import Image from "next/image";
 import { rupiah, type Event } from "@/data/data/events";
 
 export default function KartuEvent({ event }: { event: Event }) {
@@ -7,6 +8,14 @@ export default function KartuEvent({ event }: { event: Event }) {
 
   return (
     <article className="rounded-xl border bg-white p-4 shadow-sm">
+      <Image
+        src={event.gambar ?? "/img/default.png"}
+        alt={event.judul}
+        width={400}
+        height={210}
+        className="mb-3 rounded-lg"
+      />
+
       <span className="rounded bg-blue-100 px-2 py-1 text-xs text-blue-700">
         {event.kategori}
       </span>
