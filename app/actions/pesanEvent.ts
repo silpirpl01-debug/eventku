@@ -3,7 +3,7 @@
 
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
-import { events } from "@/data/data/events";
+import { ambilEvent } from "@/data/data/ambil";
 
 type FormState = {
   errors?: {
@@ -37,7 +37,7 @@ export async function pesanEvent(
   const jumlahText = String(formData.get("jumlah") ?? "");
   const jumlah = Number(jumlahText);
 
-  const event = events.find((item) => item.id === eventId);
+  const event = await ambilEvent(eventId);
 
   if (!event) {
     return { message: "Event tidak ditemukan." };

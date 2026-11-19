@@ -1,8 +1,7 @@
-
 "use client";
 
 import { useActionState, useState } from "react";
-import { pesanEvent, type FormState } from "@/app/actions/actions";
+import { pesanTiket, type HasilPesan } from "@/app/actions/actions";
 import { rupiah, type Event } from "@/data/data/events";
 
 export default function FormPesan({
@@ -12,15 +11,18 @@ export default function FormPesan({
   event: Event;
   namaAwal: string;
 }) {
-  const awal: FormState = {};
+  const awal: HasilPesan = {
+    berhasil: false,
+    pesan: "",
+    galat: {},
+    isian: { nama: namaAwal, email: "" },
+  };
 
   const [hasil, kirim, sedangKirim] = useActionState(
-    pesanEvent,
+    pesanTiket,
     awal
   );
 
-  const [nama, setNama] = useState(namaAwal);
-  const [email, setEmail] = useState("");
   const [jumlah, setJumlah] = useState(1);
 
   const sisa = event.kuota - event.terisi;
@@ -35,22 +37,27 @@ export default function FormPesan({
 
   return (
     <form action={kirim} className="mt-6 space-y-3 border-t pt-4">
-      <h2 className="text-lg font-semibold">Pesan tiket</h2>
+      <h2 className="text-lg font-semibold">
+        Pesan Tiket
+      </h2>
 
-      <input type="hidden" name="eventId" value={event.id} />
+      <input
+        type="hidden"
+        name="eventId"
+        value={event.id}
+      />
 
       <div>
         <input
           name="nama"
-          value={nama}
-          onChange={(e) => setNama(e.target.value)}
+          defaultValue={hasil.isian.nama}
           placeholder="Nama pemesan"
           className="block w-full rounded border px-3 py-2"
         />
 
-        {hasil.errors?.nama && (
+        {hasil.galat.nama && (
           <p className="text-sm text-red-600">
-            {hasil.errors.nama}
+            {hasil.galat.nama}
           </p>
         )}
       </div>
@@ -58,16 +65,14 @@ export default function FormPesan({
       <div>
         <input
           name="email"
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="Email pemesan"
+          defaultValue={hasil.isian.email}
+          placeholder="Email"
           className="block w-full rounded border px-3 py-2"
         />
 
-        {hasil.errors?.email && (
+        {hasil.galat.email && (
           <p className="text-sm text-red-600">
-            {hasil.errors.email}
+            {hasil.galat.email}
           </p>
         )}
       </div>
@@ -77,14 +82,15 @@ export default function FormPesan({
           name="jumlah"
           type="number"
           min="1"
+          max="5"
           value={jumlah}
           onChange={(e) => setJumlah(Number(e.target.value))}
           className="block w-32 rounded border px-3 py-2"
         />
 
-        {hasil.errors?.jumlah && (
+        {hasil.galat.jumlah && (
           <p className="text-sm text-red-600">
-            {hasil.errors.jumlah}
+            {hasil.galat.jumlah}
           </p>
         )}
       </div>
@@ -93,18 +99,23 @@ export default function FormPesan({
         Total: <b>{rupiah(event.harga * jumlah)}</b>
       </p>
 
-      {hasil.message && (
-        <p className={hasil.success ? "text-green-700" : "text-red-600"}>
-          {hasil.message}
+      {hasil.pesan && (
+        <p
+          className={
+            hasil.berhasil
+              ? "text-green-700"
+              : "text-red-600"
+          }
+        >
+          {hasil.pesan}
         </p>
       )}
 
       <button
-        type="submit"
         disabled={sedangKirim}
-        className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+        className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
       >
-        {sedangKirim ? "Memproses ..." : "Pesan"}
+        {sedangKirim ? "Memproses..." : "Pesan"}
       </button>
     </form>
   );

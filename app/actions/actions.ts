@@ -1,166 +1,194 @@
-
 "use server";
 
-import { readFile, writeFile, mkdir } from "node:fs/promises";
-import path from "node:path";
-import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
-import { events } from "@/data/data/events";
+import { revalidatePath } from "next/cache";
 
-export type FormState = {
-  errors?: {
+import { ambilEvent } from "@/data/data/ambil";
+import { supabaseAdmin } from "@/lib/supabase-admin";
+
+export type HasilPesan = {
+  berhasil: boolean;
+  pesan: string;
+  galat: {
     nama?: string;
     email?: string;
     jumlah?: string;
   };
-  message?: string;
-  success?: boolean;
+  isian: {
+    nama: string;
+    email: string;
+  };
 };
 
-type Pesanan = {
-  id: string;
-  eventId: number;
-  nama: string;
-  email: string;
-  jumlah: number;
-  total: number;
-  tanggal: string;
-};
-
-const filePath = path.join(process.cwd(), "data", "pesanan.json");
-
-// ACTION 1: Memesan tiket
-export async function pesanEvent(
-  prevState: FormState,
+// Menyimpan pesanan tiket
+export async function pesanTiket(
+  _sebelum: HasilPesan,
   formData: FormData
-): Promise<FormState> {
+): Promise<HasilPesan> {
   const eventId = Number(formData.get("eventId"));
   const nama = String(formData.get("nama") ?? "").trim();
   const email = String(formData.get("email") ?? "").trim();
-  const jumlahText = String(formData.get("jumlah") ?? "");
-  const jumlah = Number(jumlahText);
+  const jumlah = Number(formData.get("jumlah"));
 
-  const event = events.find((item) => item.id === eventId);
+  const isian = { nama, email };
+
+  const event = await ambilEvent(eventId);
 
   if (!event) {
-    return { message: "Event tidak ditemukan." };
+    return {
+      berhasil: false,
+      pesan: "Event tidak ditemukan.",
+      galat: {},
+      isian,
+    };
   }
 
-  const errors: NonNullable<FormState["errors"]> = {};
+  const sisa = event.kuota - event.terisi;
+  const galat: HasilPesan["galat"] = {};
 
+  // Validasi nama
   if (nama.length < 3) {
-    errors.nama = "Nama minimal 3 huruf.";
+    galat.nama = "Nama minimal 3 huruf.";
   } else if (nama.length > 40) {
-    errors.nama = "Nama maksimal 40 huruf.";
+    galat.nama = "Nama maksimal 40 huruf.";
   }
 
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    errors.email = "Email tidak valid.";
+  // Validasi email
+  if (!email.includes("@")) {
+    galat.email = "Email harus memuat tanda @.";
   }
 
-  if (!jumlahText || !Number.isInteger(jumlah) || jumlah < 1) {
-    errors.jumlah = "Jumlah tiket minimal 1.";
+  // Validasi jumlah tiket
+  if (!Number.isInteger(jumlah) || jumlah < 1) {
+    galat.jumlah = "Jumlah tiket minimal 1.";
+  } else if (jumlah > 5) {
+    galat.jumlah = "Maksimal 5 tiket per pesanan.";
+  } else if (jumlah > sisa) {
+    galat.jumlah = `Sisa tiket hanya ${sisa}.`;
   }
 
-  if (Object.keys(errors).length > 0) {
-    return { errors };
+  if (Object.keys(galat).length > 0) {
+    return {
+      berhasil: false,
+      pesan: "Periksa lagi isian yang merah.",
+      galat,
+      isian,
+    };
   }
 
-  try {
-    await mkdir(path.dirname(filePath), { recursive: true });
+  // Memperbarui kuota dengan pemeriksaan nilai terisi
+  const { data: kuotaBerubah, error: galatKuota } =
+    await supabaseAdmin
+      .from("events")
+      .update({
+        terisi: event.terisi + jumlah,
+      })
+      .eq("id", eventId)
+      .eq("terisi", event.terisi)
+      .select();
 
-    let pesananLama: Pesanan[] = [];
+  if (galatKuota) {
+    return {
+      berhasil: false,
+      pesan: "Gagal memperbarui kuota. Coba lagi.",
+      galat: {},
+      isian,
+    };
+  }
 
-    try {
-      const isi = await readFile(filePath, "utf8");
-      pesananLama = JSON.parse(isi);
-    } catch {
-      pesananLama = [];
-    }
+  // Jika tidak ada baris yang berubah, kuota sudah berubah
+  if (!kuotaBerubah || kuotaBerubah.length === 0) {
+    return {
+      berhasil: false,
+      pesan: "Tiket baru saja berubah, coba lagi.",
+      galat: {},
+      isian,
+    };
+  }
 
-    const sudahDipesan = pesananLama
-      .filter((item) => item.eventId === event.id)
-      .reduce((total, item) => total + item.jumlah, 0);
-
-    const sisa = event.kuota - event.terisi - sudahDipesan;
-
-    if (jumlah > sisa || sisa <= 0) {
-      return {
-        errors: {
-          jumlah: `Sisa tiket hanya ${Math.max(0, sisa)}.`,
-        },
-      };
-    }
-
-    const pesananBaru: Pesanan = {
-      id: Date.now().toString(),
-      eventId,
+  // Menyimpan pesanan setelah kuota berhasil diperbarui
+  const { data: baru, error } = await supabaseAdmin
+    .from("pesanan")
+    .insert({
+      event_id: eventId,
       nama,
       email,
       jumlah,
       total: event.harga * jumlah,
-      tanggal: new Date().toISOString(),
-    };
+    })
+    .select("nomor")
+    .single();
 
-    await writeFile(
-      filePath,
-      JSON.stringify([...pesananLama, pesananBaru], null, 2),
-      "utf8"
-    );
-
-    // Simpan nama ke cookie selama 30 hari
-    const toples = await cookies();
-
-    toples.set("nama", nama, {
-      maxAge: 60 * 60 * 24 * 30,
-    });
-
-    revalidatePath("/event");
-    revalidatePath(`/event/${eventId}`);
-    revalidatePath("/pesanan");
+  if (error) {
+    // Mengembalikan kuota jika penyimpanan pesanan gagal
+    await supabaseAdmin
+      .from("events")
+      .update({
+        terisi: event.terisi,
+      })
+      .eq("id", eventId)
+      .eq("terisi", event.terisi + jumlah);
 
     return {
-      success: true,
-      message: `Terima kasih ${nama}! ${jumlah} tiket berhasil dipesan.`,
-    };
-  } catch {
-    return {
-      message: "Pesanan gagal disimpan.",
+      berhasil: false,
+      pesan: "Pesanan gagal disimpan. Coba lagi.",
+      galat: {},
+      isian,
     };
   }
+
+  // Menyimpan nama pemesan dalam cookie
+  const toples = await cookies();
+
+  toples.set("nama", nama, {
+    maxAge: 60 * 60 * 24 * 30,
+  });
+
+  revalidatePath("/event");
+  revalidatePath(`/event/${eventId}`);
+  revalidatePath("/pesanan");
+
+  return {
+    berhasil: true,
+    pesan: `Pesanan #${baru.nomor} tersimpan: ${jumlah} tiket untuk ${nama}.`,
+    galat: {},
+    isian: { nama, email },
+  };
 }
 
-// ACTION 2: Membatalkan pesanan
+// Membatalkan pesanan tiket
 export async function batalkanPesanan(formData: FormData) {
-  const id = String(formData.get("id") ?? "");
+  const nomor = Number(formData.get("nomor"));
   const namaSaya = (await cookies()).get("nama")?.value;
 
-  if (!id || !namaSaya) return;
-
-  try {
-    const isi = await readFile(filePath, "utf8");
-    const daftarPesanan: Pesanan[] = JSON.parse(isi);
-
-    // Memeriksa apakah pesanan benar-benar milik pengguna
-    const index = daftarPesanan.findIndex(
-      (p) => p.id === id && p.nama === namaSaya
-    );
-
-    if (index === -1) return;
-
-    // Menghapus pesanan
-    const [batal] = daftarPesanan.splice(index, 1);
-
-    await writeFile(
-      filePath,
-      JSON.stringify(daftarPesanan, null, 2),
-      "utf8"
-    );
-
-    revalidatePath("/event");
-    revalidatePath(`/event/${batal.eventId}`);
-    revalidatePath("/pesanan");
-  } catch {
+  if (!Number.isInteger(nomor) || !namaSaya) {
     return;
   }
+
+  const { data: batal, error } = await supabaseAdmin
+    .from("pesanan")
+    .delete()
+    .eq("nomor", nomor)
+    .eq("nama", namaSaya)
+    .select()
+    .maybeSingle();
+
+  if (error || !batal) {
+    return;
+  }
+
+  const event = await ambilEvent(batal.event_id);
+
+  if (event) {
+    await supabaseAdmin
+      .from("events")
+      .update({
+        terisi: Math.max(0, event.terisi - batal.jumlah),
+      })
+      .eq("id", batal.event_id);
+  }
+
+  revalidatePath("/event");
+  revalidatePath(`/event/${batal.event_id}`);
+  revalidatePath("/pesanan");
 }

@@ -1,12 +1,12 @@
-import { events } from "@/data/data/events";
+import { ambilEvent } from "@/data/data/ambil";
 
 export async function GET(
   request: Request,
-  { params }: RouteContext<"/api/events/[id]">
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
 
-  const event = events.find((e) => e.id === Number(id));
+  const event = await ambilEvent(Number(id));
 
   if (!event) {
     return Response.json(

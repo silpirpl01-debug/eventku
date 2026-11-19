@@ -1,39 +1,30 @@
-
-import Link from "next/link";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
+import type { Metadata } from "next";
 import { cookies } from "next/headers";
-import { events, rupiah } from "@/data/data/events";
+import Link from "next/link";
+
+import { ambilPesanan } from "@/data/data/ambil";
+import { rupiah } from "@/data/data/events";
 import { batalkanPesanan } from "@/app/actions/actions";
 
-type Pesanan = {
-  id: string;
-  eventId: number;
-  nama: string;
-  email: string;
-  jumlah: number;
-  total: number;
-  tanggal: string;
+export const metadata: Metadata = {
+  title: "Daftar Pesanan",
 };
 
-const filePath = path.join(process.cwd(), "data", "pesanan.json");
-
-async function ambilPesanan(): Promise<Pesanan[]> {
-  try {
-    const isi = await readFile(filePath, "utf8");
-    return JSON.parse(isi);
-  } catch {
-    return [];
-  }
-}
-
 export default async function HalamanPesanan() {
-  const namaCookie = (await cookies()).get("nama")?.value ?? "";
-
   const pesanan = await ambilPesanan();
 
-  const totalTiket = pesanan.reduce((t, p) => t + p.jumlah, 0);
-  const pendapatan = pesanan.reduce((t, p) => t + p.total, 0);
+  const namaSaya =
+    (await cookies()).get("nama")?.value ?? "";
+
+  const totalTiket = pesanan.reduce(
+    (total, p) => total + p.jumlah,
+    0
+  );
+
+  const pendapatan = pesanan.reduce(
+    (total, p) => total + p.total,
+    0
+  );
 
   return (
     <div>
@@ -41,9 +32,9 @@ export default async function HalamanPesanan() {
         Daftar Pesanan
       </h1>
 
-      {namaCookie && (
-        <p className="mb-3 text-slate-600">
-          Halo, <b>{namaCookie}</b>!
+      {namaSaya && (
+        <p className="mb-2 text-slate-600">
+          Halo, {namaSaya}! Pesananmu ditandai &quot;Kamu&quot;.
         </p>
       )}
 
@@ -60,8 +51,8 @@ export default async function HalamanPesanan() {
       ) : (
         <>
           <p className="mb-3 text-sm text-slate-500">
-            {pesanan.length} pesanan · {totalTiket} tiket · Pendapatan{" "}
-            {rupiah(pendapatan)}
+            {pesanan.length} pesanan · {totalTiket} tiket ·
+            pendapatan {rupiah(pendapatan)}
           </p>
 
           <div className="overflow-x-auto">
@@ -73,66 +64,57 @@ export default async function HalamanPesanan() {
                   <th className="p-2">Pemesan</th>
                   <th className="p-2">Tiket</th>
                   <th className="p-2">Total</th>
-                  <th className="p-2">Aksi</th>
+                  <th className="p-2">Waktu Pemesanan</th>
+                  <th className="p-2"></th>
                 </tr>
               </thead>
 
               <tbody>
-                {pesanan.map((p, index) => {
-                  const milikKamu =
-                    namaCookie !== "" && p.nama === namaCookie;
+                {pesanan.map((p) => (
+                  <tr key={p.nomor} className="border-t">
+                    <td className="p-2">{p.nomor}</td>
 
-                  const event = events.find(
-                    (e) => e.id === p.eventId
-                  );
+                    <td className="p-2">
+                      {p.events?.judul ?? "(event dihapus)"}
+                    </td>
 
-                  return (
-                    <tr key={p.id} className="border-t">
-                      <td className="p-2">{index + 1}</td>
+                    <td className="p-2">
+                      {p.nama}
 
-                      <td className="p-2">
-                        {event?.judul ?? "Event tidak ditemukan"}
-                      </td>
+                      {p.nama === namaSaya && (
+                        <span className="ml-2 rounded bg-green-100 px-2 py-0.5 text-xs text-green-700">
+                          Kamu
+                        </span>
+                      )}
+                    </td>
 
-                      <td className="p-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          {p.nama}
+                    <td className="p-2">{p.jumlah}</td>
 
-                          {milikKamu && (
-                            <span className="rounded-full bg-green-100 px-2 py-1 text-xs font-semibold text-green-700">
-                              Kamu
-                            </span>
-                          )}
-                        </div>
-                      </td>
+                    <td className="p-2">
+                      {rupiah(p.total)}
+                    </td>
 
-                      <td className="p-2">{p.jumlah}</td>
+                    <td className="p-2 whitespace-nowrap">
+                      {new Date(p.dibuat).toLocaleString("id-ID")}
+                    </td>
 
-                      <td className="p-2">
-                        {rupiah(p.total)}
-                      </td>
+                    <td className="p-2">
+                      {p.nama === namaSaya && (
+                        <form action={batalkanPesanan}>
+                          <input
+                            type="hidden"
+                            name="nomor"
+                            value={p.nomor}
+                          />
 
-                      <td className="p-2">
-                        {milikKamu && (
-                          <form action={batalkanPesanan}>
-                            <input
-                              type="hidden"
-                              name="id"
-                              value={p.id}
-                            />
-
-                            <button
-                              type="submit"
-                              className="font-medium text-red-600 underline hover:text-red-800"
-                            >
-                              Batalkan
-                            </button>
-                          </form>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
+                          <button className="text-red-600 underline">
+                            Batalkan
+                          </button>
+                        </form>
+                      )}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
