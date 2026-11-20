@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { cookies } from "next/headers";
 
-import { rupiah } from "@/data/data/events";
+import { rupiah, srcGambarEvent } from "@/data/data/events";
 import { ambilEvent, hitungPesanan } from "@/data/data/ambil";
 
 import FormPesan from "@/components/components/FormPesan";
@@ -50,7 +50,7 @@ export default async function Detail({
     <article className="rounded-xl border bg-white p-6">
       <div className="relative mb-4 aspect-[48/21] w-full">
         <Image
-          src={event.gambar ?? "/img/default.png"}
+          src={srcGambarEvent(event.gambar)}
           alt={event.judul}
           fill
           sizes="(max-width: 1024px) 100vw, 960px"
