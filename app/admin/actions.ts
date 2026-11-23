@@ -2,7 +2,6 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { pastikanAdmin } from "@/lib/sesi";
 
@@ -10,14 +9,13 @@ export type HasilEvent = {
   pesan: string;
   galat: Partial<
     Record<
-      "judul" | "kategori" | "tanggal" | "Lokasi" | "harga" | "kuota",
+      "judul" | "kategori" | "tanggal" | "lokasi" | "harga" | "kuota",
       string
     >
   >;
   isian: Record<string, string>;
 };
 
-// Memperbarui halaman setelah data event berubah.
 function segarkan(id?: number) {
   revalidatePath("/");
   revalidatePath("/event");
@@ -28,7 +26,36 @@ function segarkan(id?: number) {
   }
 }
 
-// Menyimpan event baru atau memperbarui event.
+function tanggalValid(tanggal: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(tanggal)) {
+    return false;
+  }
+
+  const [tahun, bulan, hari] = tanggal.split("-").map(Number);
+
+  const tanggalDibuat = new Date(
+    Date.UTC(tahun, bulan - 1, hari)
+  );
+
+  return (
+    tanggalDibuat.getUTCFullYear() === tahun &&
+    tanggalDibuat.getUTCMonth() === bulan - 1 &&
+    tanggalDibuat.getUTCDate() === hari
+  );
+}
+
+function tanggalDepan(tanggal: string) {
+  const sekarang = new Date();
+
+  const hariIni = [
+    sekarang.getFullYear(),
+    String(sekarang.getMonth() + 1).padStart(2, "0"),
+    String(sekarang.getDate()).padStart(2, "0"),
+  ].join("-");
+
+  return tanggal >= hariIni;
+}
+
 export async function simpanEvent(
   _sebelum: HasilEvent,
   formData: FormData
@@ -43,7 +70,7 @@ export async function simpanEvent(
     judul: String(formData.get("judul") ?? "").trim(),
     kategori: String(formData.get("kategori") ?? "").trim(),
     tanggal: String(formData.get("tanggal") ?? "").trim(),
-    Lokasi: String(formData.get("Lokasi") ?? "").trim(),
+    lokasi: String(formData.get("lokasi") ?? "").trim(),
     harga: String(formData.get("harga") ?? "").trim(),
     kuota: String(formData.get("kuota") ?? "").trim(),
     gambar: String(formData.get("gambar") ?? "").trim(),
@@ -54,8 +81,62 @@ export async function simpanEvent(
 
   const galat: HasilEvent["galat"] = {};
 
-  // Validasi ID.
-  if (id !== null && (!Number.isInteger(id) || id < 1)) {
+  // Validasi judul
+  if (
+    isian.judul.length < 3 ||
+    isian.judul.length > 80
+  ) {
+    galat.judul = "Judul 3 sampai 80 huruf.";
+  }
+
+  // Validasi kategori
+  if (
+    isian.kategori.length < 3 ||
+    isian.kategori.length > 20
+  ) {
+    galat.kategori = "Kategori 3 sampai 20 huruf.";
+  }
+
+  // Validasi tanggal
+  if (!tanggalValid(isian.tanggal)) {
+    galat.tanggal = "Tanggal tidak valid.";
+  } else if (!tanggalDepan(isian.tanggal)) {
+    galat.tanggal = "Tanggal harus hari ini atau tanggal depan.";
+  }
+
+  // Validasi lokasi
+  if (
+    isian.lokasi.length < 2 ||
+    isian.lokasi.length > 100
+  ) {
+    galat.lokasi = "Lokasi 2 sampai 100 huruf.";
+  }
+
+  // Validasi harga
+  if (
+    isian.harga === "" ||
+    !Number.isInteger(harga) ||
+    harga < 1 ||
+    harga > 1000000
+  ) {
+    galat.harga = "Harga 1 sampai 1.000.000.";
+  }
+
+  // Validasi kuota
+  if (
+    isian.kuota === "" ||
+    !Number.isInteger(kuota) ||
+    kuota < 1 ||
+    kuota > 1000
+  ) {
+    galat.kuota = "Kuota 1 sampai 1000.";
+  }
+
+  // Validasi ID
+  if (
+    idTeks &&
+    (!Number.isInteger(id) || id === null || id <= 0)
+  ) {
     return {
       pesan: "ID event tidak valid.",
       galat: {},
@@ -63,65 +144,15 @@ export async function simpanEvent(
     };
   }
 
-  // Validasi judul.
-  if (isian.judul.length < 3 || isian.judul.length > 80) {
-    galat.judul = "Judul 3 sampai 80 huruf.";
-  }
-
-  // Validasi kategori.
-  if (isian.kategori.length < 3 || isian.kategori.length > 20) {
-    galat.kategori = "Kategori 3 sampai 20 huruf.";
-  }
-
-  // Validasi tanggal.
-  if (
-    !/^\d{4}-\d{2}-\d{2}$/.test(isian.tanggal) ||
-    Number.isNaN(Date.parse(isian.tanggal))
-  ) {
-    galat.tanggal = "Tanggal tidak valid.";
-  }
-
-  // Validasi lokasi.
-  if (isian.Lokasi.length < 2) {
-    galat.Lokasi = "Lokasi minimal 2 huruf.";
-  }
-
-  // Validasi harga.
-  if (
-    isian.harga === "" ||
-    !Number.isInteger(harga) ||
-    harga < 0 ||
-    harga > 1_000_000
-  ) {
-    galat.harga = "Harga 0 sampai 1.000.000 (bilangan bulat).";
-  }
-
-  // Validasi kuota.
-  if (
-    !Number.isInteger(kuota) ||
-    kuota < 1 ||
-    kuota > 1000
-  ) {
-    galat.kuota = "Kuota 1 sampai 1000 (bilangan bulat).";
-  }
-
-  // Kuota tidak boleh lebih kecil dari tiket yang sudah terisi.
-  if (id !== null && !galat.kuota) {
+  // Kuota tidak boleh di bawah tiket yang sudah terisi
+  if (id !== null && Number.isInteger(id) && !galat.kuota) {
     const { data, error } = await supabaseAdmin
       .from("events")
       .select("terisi")
       .eq("id", id)
       .maybeSingle();
 
-    if (error) {
-      return {
-        pesan: "Gagal memeriksa kuota: " + error.message,
-        galat: {},
-        isian,
-      };
-    }
-
-    if (!data) {
+    if (error || !data) {
       return {
         pesan: "Event tidak ditemukan.",
         galat: {},
@@ -134,7 +165,7 @@ export async function simpanEvent(
     }
   }
 
-  // Jika ada kesalahan validasi, kembalikan pesan.
+  // Mengembalikan pesan jika ada validasi gagal
   if (Object.keys(galat).length > 0) {
     return {
       pesan: "Periksa lagi isian yang merah.",
@@ -143,22 +174,26 @@ export async function simpanEvent(
     };
   }
 
-  // Data yang akan disimpan ke Supabase.
   const baris = {
     judul: isian.judul,
     kategori: isian.kategori,
     tanggal: isian.tanggal,
-    Lokasi: isian.Lokasi,
+    lokasi: isian.lokasi,
     harga,
     kuota,
     gambar: isian.gambar || null,
   };
 
-  // Tambah event baru atau perbarui event lama.
+  // Menambah atau memperbarui event
   const { error } =
     id === null
-      ? await supabaseAdmin.from("events").insert(baris)
-      : await supabaseAdmin.from("events").update(baris).eq("id", id);
+      ? await supabaseAdmin
+          .from("events")
+          .insert(baris)
+      : await supabaseAdmin
+          .from("events")
+          .update(baris)
+          .eq("id", id);
 
   if (error) {
     return {
@@ -173,18 +208,19 @@ export async function simpanEvent(
   redirect(
     "/admin?info=" +
       encodeURIComponent(
-        id === null ? "Event ditambahkan." : "Perubahan disimpan."
+        id === null
+          ? "Event ditambahkan."
+          : "Perubahan disimpan."
       )
   );
 }
 
-// Menghapus event.
 export async function hapusEvent(formData: FormData) {
   await pastikanAdmin();
 
   const id = Number(formData.get("id"));
 
-  if (!Number.isInteger(id) || id < 1) {
+  if (!Number.isInteger(id) || id <= 0) {
     redirect("/admin");
   }
 
@@ -194,13 +230,14 @@ export async function hapusEvent(formData: FormData) {
     .eq("id", id);
 
   if (error) {
-    // 23503 = event masih digunakan oleh tabel lain.
     const pesan =
       error.code === "23503"
         ? "Event ini sudah punya pesanan, jadi tidak bisa dihapus."
         : "Gagal menghapus: " + error.message;
 
-    redirect("/admin?galat=" + encodeURIComponent(pesan));
+    redirect(
+      "/admin?galat=" + encodeURIComponent(pesan)
+    );
   }
 
   segarkan(id);
